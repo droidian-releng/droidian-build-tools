@@ -1,0 +1,124 @@
+#!/bin/bash
+#
+# Copyright 2022 Eugenio Paolantonio (g7)
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+script_path=$(realpath "${BASH_SOURCE:-${0}}")
+cd "$(dirname ${script_path})"
+
+source ./src/build-tools/common.sh
+source ./src/build-tools/gpg.sh
+source ./src/build-tools/adaptation.sh
+source ./src/build-tools/image.sh
+
+help() {
+	cat <<EOF
+${0} - creates a new device template
+
+Usage: ${0} [OPTIONS]
+
+Options:
+  -v              - Device vendor (required)
+  -n              - Device name/family (required)
+  -c              - Device architecture (defaults to 'arm64')
+  -a              - Port apilevel (required)
+  -r              - Port variant (defaults to 'phone')
+  -d              - Destination directory
+EOF
+}
+
+
+
+while getopts "v:n:a:r:d:h" option; do
+	case "${option}" in
+		v)
+			device_vendor=$(slugify "${OPTARG}")
+			;;
+		n)
+			device_name=$(slugify "${OPTARG}")
+			;;
+		c)
+			device_arch="${OPTARG}"
+			;;
+		a)
+			device_apilevel="${OPTARG}"
+			;;
+		r)
+			device_variant="${OPTARG}"
+			;;
+		d)
+			destdir=$(realpath "${OPTARG}")
+			;;
+		*)
+			help
+			exit
+			;;
+	esac
+done
+
+[ -n "${device_vendor}" ] || error "No device vendor specified"
+[ -n "${device_name}" ] || error "No device name specified"
+[ -n "${device_arch}" ] || device_arch="arm64"
+[ -n "${device_apilevel}" ] || error "No apilevel specified"
+[ -n "${device_variant}" ] || device_variant="phone"
+[ -n "${destdir}" ] || destdir="${PWD}"
+
+GIT=$(choose_application git) || error "git not found"
+
+device_slug="${device_vendor}-${device_name}"
+info "Creating device template for ${device_slug}"
+
+device_path="${destdir}/${device_vendor}/${device_name}"
+
+[ ! -e "${device_path}" ] || error "${device_path} already exists, aborting"
+
+mkdir -p "${device_path}"
+
+# Create gpg keys
+setup_gpg \
+	"${device_path}" \
+	"${device_slug}"
+
+# Build adaptation template
+setup_adaptation \
+	"${device_path}/packages" \
+	"${device_slug}" \
+	"${device_arch}" \
+	"${device_apilevel}" \
+	"${device_variant}" \
+	"${device_path}/private/gpg_public.gpg"
+
+# Setup image stuff
+setup_image \
+	"${device_path}" \
+	"${device_vendor}" \
+	"${device_name}" \
+	"${device_arch}" \
+	"${device_apilevel}" \
+	"${device_variant}"
+
+# Create adaptation setting file
+cat > "${device_path}/droidian-community-adaptation" <<EOF
+export DROIDIAN_VENDOR="${device_vendor}"
+export DROIDIAN_NAME="${device_name}"
+export DROIDIAN_DEVICE_SLUG="${device_slug}"
+export DROIDIAN_ARCH="${device_arch}"
+export DROIDIAN_APILEVEL="${device_apilevel}"
+export DROIDIAN_VARIANT="${device_variant}"
+export DROIDIAN_REPOSITORY_DIR="${device_path}/droidian/apt"
+EOF
+
+

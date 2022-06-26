@@ -1,0 +1,95 @@
+#!/bin/bash
+#
+# Copyright 2022 Eugenio Paolantonio (g7)
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+ORIG_PWD="${PWD}"
+
+script_path=$(realpath "${BASH_SOURCE:-${0}}")
+cd "$(dirname ${script_path})"
+
+source ./src/build-tools/common.sh
+source ./src/build-tools/adaptation.sh
+source ./src/build-tools/package.sh
+
+help() {
+	cat <<EOF
+${0} - builds a package
+
+Usage: ${0} [OPTIONS]
+
+Options:
+  -b              - Build arch (optional, useful for crossbuilds)
+EOF
+}
+
+while getopts "b:h" option; do
+	case "${option}" in
+		b)
+			build_arch="${OPTARG}"
+			;;
+		*)
+			help
+			exit
+			;;
+	esac
+done
+
+adaptation_info=$(find_adaptation_info "${ORIG_PWD}") || error "Unable to find adaptation info. Are you in the correct directory?"
+
+source "${adaptation_info}"
+
+[ -n "${build_arch}" ] || build_arch="${DROIDIAN_ARCH}"
+[ -n "${packagedir}" ] || packagedir="${ORIG_PWD}"
+
+GIT=$(choose_application git) || error "git not found"
+DOCKER="$(choose_application docker)" || error "docker not found"
+
+[ -e "${packagedir}/debian" ] || error "No debian packaging found"
+[ -e "${packagedir}/.git" ] || error "Package must be a git repository"
+
+info "Building package for ${DROIDIAN_DEVICE_SLUG}"
+
+device_path="$(dirname ${adaptation_info})"
+
+resultdir="$(mktemp -d)"
+cleanup() {
+	rm -rf "${resultdir}" || true
+}
+trap cleanup EXIT
+
+build_package \
+	"${packagedir}" \
+	"${resultdir}" \
+	"${DROIDIAN_REPOSITORY_DIR}" \
+	"${build_arch}" \
+	"${DROIDIAN_ARCH}" \
+	|| error "Unable to build package"
+
+changes=$(realpath ${resultdir}/*.changes)
+package_name=$(parse_source_name_from_changes ${changes})
+package_version=$(parse_version_from_changes ${changes})
+
+[ -n "${package_name}" ] || package_name=$(basename ${packagedir})
+[ -n "${package_version}" ] || package_version="unknown"
+
+import_and_sign_packages \
+	"${resultdir}" \
+	"${DROIDIAN_REPOSITORY_DIR}" \
+	"${device_path}/private/gpg" \
+	"${package_name}" \
+	"${package_version}" \
+	|| error "Unable to import packages"
