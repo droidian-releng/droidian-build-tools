@@ -42,7 +42,7 @@ EOF
 
 
 
-while getopts "v:n:a:r:d:h" option; do
+while getopts "v:n:c:a:r:d:h" option; do
 	case "${option}" in
 		v)
 			device_vendor=$(slugify "${OPTARG}")
