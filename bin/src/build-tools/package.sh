@@ -34,7 +34,6 @@ build_package() {
 		-v "${LOCAL_REPO_DIR}":/buildd/local-repo \
 		-e RELENG_FULL_BUILD=yes \
 		-e RELENG_HOST_ARCH="${DEST_ARCH}" \
-		-e EXTRA_REPOS="deb [trusted=yes] file:///buildd/local-repo/ ./" \
 		quay.io/droidian/build-essential:${DROIDIAN_RELEASE}-${ARCH} \
 		/bin/sh -c 'cd /buildd/sources && releng-build-package'
 }
