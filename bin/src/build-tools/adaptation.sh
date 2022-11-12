@@ -120,7 +120,7 @@ EOF
 	chmod +x "${adaptation_packaging_dir}/rules"
 
 	cat > "${adaptation_packaging_dir}/adaptation-${DEVICE_SLUG}-configs.install" <<EOF
-sparse/*
+sparse/* /
 EOF
 
 	cat > "${adaptation_packaging_dir}/adaptation-${DEVICE_SLUG}-configs.dirs" <<EOF
